@@ -1,0 +1,120 @@
+import hashlib
+import time
+from typing import List, Dict
+
+class Transaction:
+    def __init__(self, sender, recipient, amount):
+        self.sender = sender
+        self.recipient = recipient
+        self.amount = amount
+        self.timestamp = time.time()
+
+    def calculate_hash(self):
+        transaction_string = f"{self.sender}{self.recipient}{self.amount}{self.timestamp}"
+        return hashlib.sha256(transaction_string.encode()).hexdigest()
+
+    def __str__(self):
+        return f"Transaction({self.sender} -> {self.recipient}, Amount: {self.amount})"
+
+class Block:
+    def __init__(self, index, previous_hash, timestamp, transactions: List[Transaction], nonce=0):
+        self.index = index
+        self.previous_hash = previous_hash
+        self.timestamp = timestamp
+        self.transactions = transactions
+        self.nonce = nonce
+        self.hash = self.calculate_hash()
+
+    def calculate_hash(self):
+        transaction_hashes = ''.join(tx.calculate_hash() for tx in self.transactions)
+        block_string = f"{self.index}{self.previous_hash}{self.timestamp}{transaction_hashes}{self.nonce}"
+        return hashlib.sha256(block_string.encode()).hexdigest()
+
+    def __str__(self):
+        return (f"Block(Index: {self.index}, Previous Hash: {self.previous_hash}, "
+                f"Timestamp: {self.timestamp}, Transactions: {len(self.transactions)}, "
+                f"Nonce: {self.nonce}, Hash: {self.hash})")
+
+class Blockchain:
+    def __init__(self):
+        self.chain = [self.create_genesis_block()]
+        self.difficulty = 4
+        self.pending_transactions = []
+        self.transactions_per_block = 5  # Number of transactions per block
+        self.create_account("admin")  # Initial admin account with some balance
+
+    def create_genesis_block(self):
+        return Block(0, "0", time.time(), [])
+
+    def get_latest_block(self):
+        return self.chain[-1]
+
+    def add_block(self, new_block):
+        new_block.previous_hash = self.get_latest_block().hash
+        new_block.hash = new_block.calculate_hash()
+        self.chain.append(new_block)
+
+    def proof_of_work(self, block):
+        while block.hash[:self.difficulty] != '0' * self.difficulty:
+            block.nonce += 1
+            block.hash = block.calculate_hash()
+        return block
+
+    def is_chain_valid(self):
+        for i in range(1, len(self.chain)):
+            current_block = self.chain[i]
+            previous_block = self.chain[i - 1]
+
+            if current_block.hash != current_block.calculate_hash():
+                return False
+
+            if current_block.previous_hash != previous_block.hash:
+                return False
+
+        return True
+
+    def create_account(self, address):
+        if address not in self.pending_transactions:
+            self.pending_transactions.append(Transaction("admin", address, 1000))
+            print(f"Account {address} created with initial balance.")
+
+    def add_transaction(self, transaction):
+        if self.pending_transactions and len(self.pending_transactions) < self.transactions_per_block:
+            self.pending_transactions.append(transaction)
+            print(f"Transaction added: {transaction}")
+        else:
+            print("Cannot add transaction. Either no pending transactions or block limit reached.")
+
+    def mine_block(self):
+        if not self.pending_transactions:
+            print("No transactions to mine.")
+            return
+
+        new_block = Block(len(self.chain), self.get_latest_block().hash, time.time(), self.pending_transactions)
+        mined_block = self.proof_of_work(new_block)
+        self.add_block(mined_block)
+        self.pending_transactions = []
+        print(f"Block mined: {mined_block}")
+
+# Example Usage
+chain_beacon = Blockchain()
+
+# Create accounts
+chain_beacon.create_account("alice")
+chain_beacon.create_account("bob")
+
+# Add transactions
+chain_beacon.add_transaction(Transaction("alice", "bob", 50))
+chain_beacon.add_transaction(Transaction("bob", "alice", 25))
+
+# Mine a block
+chain_beacon.mine_block()
+
+# Print blockchain
+for block in chain_beacon.chain:
+    print(block)
+    for tx in block.transactions:
+        print(f"  {tx}")
+
+# Check if blockchain is valid
+print("Is blockchain valid?", chain_beacon.is_chain_valid())
